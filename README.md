@@ -1,15 +1,22 @@
-Step 1: Install requirements
+Step 1: Create a virtual environment
+```sh
+python3 -m venv .venv
+source .venv/bin/activate # On Windows, use `.\.venv\Scripts\activate`
+```
+
+
+Step 2: Install requirements
 
 ```sh
 pip install -r requirements.txt
 ```
 
-Step 2: Download the datasets
+Step 3: Download the datasets
 
 - [MedQuAD dataset](https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset)
 - [PubMed 200k RTC](https://www.kaggle.com/datasets/matthewjansen/pubmed-200k-rtc)
 
-Step 3: Download Word2Vec model
+Step 4: Download Word2Vec model
 
 - [GoogleNews-vectors-negative300
   ](https://www.kaggle.com/datasets/leadbest/googlenewsvectorsnegative300)
@@ -56,4 +63,4 @@ Your directory should look like this:
 └── stbi.ipynb
 ```
 
-Step 4: Run the notebook
+Step 5: Run the notebook
