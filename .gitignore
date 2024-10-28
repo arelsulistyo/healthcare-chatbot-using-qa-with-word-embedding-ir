@@ -1,2 +1,7 @@
 PubMed*/
 MedQuad*
+
+.venv/
+
+GoogleNews-vectors-negative300.bin
+GoogleNews-vectors-negative300.bin.gz
