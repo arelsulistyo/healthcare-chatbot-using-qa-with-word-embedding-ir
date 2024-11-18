@@ -1,6 +1,7 @@
 bioasq_combined.csv
 PubMed*/
 MedQuad-MedicalQnADataset.csv
+MedQuad-MedicalQnADataset-filtered.csv
 
 .venv/
 
