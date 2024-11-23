@@ -2,7 +2,7 @@ bioasq_combined.csv
 PubMed*/
 MedQuad-MedicalQnADataset.csv
 MedQuad-MedicalQnADataset-filtered.csv
-processed_embeddings_*.csv
+processed_embeddings*.csv
 pubmed_part*.csv
 
 .venv/
