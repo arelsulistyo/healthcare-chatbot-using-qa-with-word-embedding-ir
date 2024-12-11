@@ -1,5 +1,12 @@
+bert_processed_embeddings
+biobert_processed_embeddings
+
+
 PubMed*/
 MedQuad-MedicalQnADataset.csv
+MedQuad-MedicalQnADataset-filtered.csv
+processed_embeddings*.csv
+pubmed_part*.csv
 
 .venv/
 
@@ -7,3 +14,5 @@ GoogleNews-vectors-negative300.bin
 GoogleNews-vectors-negative300.bin.gz
 
 .env
+
+train_medquad.csv
