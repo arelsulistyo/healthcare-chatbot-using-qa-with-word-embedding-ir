@@ -31,29 +31,77 @@ function formatMessage(text) {
   return text;
 }
 
-function addMessage(text, isUser) {
+function addMessage(text, isUser, context = null) {
   const messageDiv = document.createElement("div");
   messageDiv.className = `message ${isUser ? "user-message" : "bot-message"}`;
 
   if (isUser) {
     messageDiv.textContent = text;
   } else {
-    // Split the response into chunks for smoother animation
     const formattedText = formatMessage(text);
     messageDiv.innerHTML = formattedText;
+
+    // Add context button if context exists
+    if (context) {
+      const contextButton = document.createElement("button");
+      contextButton.className = "context-button";
+      contextButton.textContent = "Show Context";
+      contextButton.onclick = () => showContext(context);
+      messageDiv.appendChild(contextButton);
+    }
   }
 
-  // Add the message with a slight delay for smoother appearance
   setTimeout(
     () => {
       chatMessages.appendChild(messageDiv);
-
-      // Smooth scroll to the new message
       messageDiv.scrollIntoView({ behavior: "smooth", block: "end" });
     },
     isUser ? 0 : 100
-  ); // Slight delay for bot messages
+  );
 }
+
+function showContext(context) {
+  const modal = document.getElementById("contextModal");
+  const qaPairsDiv = document.getElementById("qaPairs");
+  const abstractsDiv = document.getElementById("abstracts");
+
+  // Clear previous content
+  qaPairsDiv.innerHTML = "";
+  abstractsDiv.innerHTML = "";
+
+  // Add QA pairs
+  context.qa_pairs.forEach((qa) => {
+    const qaDiv = document.createElement("div");
+    qaDiv.className = "qa-pair";
+    qaDiv.innerHTML = `
+      <h4>Q: ${qa.Question}</h4>
+      <p>A: ${qa.Answer}</p>
+    `;
+    qaPairsDiv.appendChild(qaDiv);
+  });
+
+  // Add abstracts
+  context.abstracts.forEach((abstract) => {
+    const abstractDiv = document.createElement("div");
+    abstractDiv.className = "abstract";
+    abstractDiv.innerHTML = `<p>${abstract.abstract_text}</p>`;
+    abstractsDiv.appendChild(abstractDiv);
+  });
+
+  modal.style.display = "block";
+}
+
+// Add modal close functionality
+document.querySelector(".close").onclick = function () {
+  document.getElementById("contextModal").style.display = "none";
+};
+
+window.onclick = function (event) {
+  const modal = document.getElementById("contextModal");
+  if (event.target == modal) {
+    modal.style.display = "none";
+  }
+};
 
 function showLoading() {
   const loadingDiv = document.createElement("div");
@@ -108,7 +156,11 @@ async function sendMessage() {
     setTimeout(() => loadingDiv.remove(), 100);
 
     if (data.status === "success") {
-      addMessage(data.response, false);
+      const context = {
+        qa_pairs: data.qa_pairs,
+        abstracts: data.abstracts,
+      };
+      addMessage(data.response, false, context);
     } else {
       addMessage("Sorry, there was an error processing your request.", false);
     }
