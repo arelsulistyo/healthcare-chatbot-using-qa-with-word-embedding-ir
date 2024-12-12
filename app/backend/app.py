@@ -37,12 +37,15 @@ llm_model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Load embeddings
 print("Loading embeddings...")
-def extract_vector(vector_str):
+def extract_vector(vector_str, delimiter=None):
     try:
-        # Clean the string and split by comma
+        # Clean the string and split by specified delimiter or whitespace
         vector_str = vector_str.strip('[]')
-        return np.array([float(x) for x in vector_str.split(',')])
+        if delimiter:
+            return np.array([float(x) for x in vector_str.split(delimiter)])
+        return np.array([float(x) for x in vector_str.split()])
     except Exception as e:
+        print(f"Error extracting vector: {str(e)}")
         return np.zeros(768)  # Return zero vector as fallback
 
 def load_embeddings(file_path):
@@ -54,18 +57,22 @@ def load_embeddings(file_path):
         print(f"Error loading {file_path}: {str(e)}")
         return pd.DataFrame()
 
-# Load MedQuAD embeddings
+# Load MedQuAD embeddings (using space delimiter)
 medquad_embeddings = load_embeddings('../../biobert_processed_embeddings/train_medquad.csv')
 if not medquad_embeddings.empty:
-    medquad_embeddings['question_vector'] = medquad_embeddings['question_vector'].apply(extract_vector)
+    medquad_embeddings['question_vector'] = medquad_embeddings['question_vector'].apply(
+        lambda x: extract_vector(x)  # Default delimiter (space)
+    )
 
-# Load all PubMed embeddings
+# Load all PubMed embeddings (using comma delimiter)
 pubmed_dfs = []
-for i in range(1, 9):  # Assuming you have 5 embedding files
+for i in range(1, 9):
     file_path = f'../../biobert_processed_embeddings/processed_embeddings_{i}.csv'
     df = load_embeddings(file_path)
     if not df.empty:
-        df['abstract_vector'] = df['abstract_vector'].apply(extract_vector)
+        df['abstract_vector'] = df['abstract_vector'].apply(
+            lambda x: extract_vector(x, delimiter=',')  # Comma delimiter
+        )
         pubmed_dfs.append(df)
 
 # Combine all PubMed embeddings
@@ -75,6 +82,12 @@ print(f"Total PubMed embeddings loaded: {len(pubmed_embeddings)}")
 class ChatRequest(BaseModel):
     query: str
 
+class ChatResponse(BaseModel):
+    response: str
+    status: str
+    qa_pairs: list
+    abstracts: list
+
 def get_biobert_embedding(text):
     inputs = tokenizer(text, return_tensors="pt", max_length=512, 
                       truncation=True, padding=True)
@@ -83,19 +96,62 @@ def get_biobert_embedding(text):
         embeddings = outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
     return embeddings
 
+def find_top_k_abstracts(df, query_vector, abstract_vectors_col, k=3):
+    cosine_scores = cosine_similarity([query_vector], np.array(df[abstract_vectors_col]).tolist())[0]
+    top_k_indices = np.argsort(cosine_scores)[-k:][::-1]
+    return df.iloc[top_k_indices]['abstract_id'].values, cosine_scores[top_k_indices]
+
+def find_top_k_answers(df, query_vector, question_vectors_col, k=3):
+    cosine_scores = cosine_similarity([query_vector], np.array(df[question_vectors_col]).tolist())[0]
+    top_k_indices = np.argsort(cosine_scores)[-k:][::-1]
+    return df.iloc[top_k_indices]['qa_id'].values, cosine_scores[top_k_indices]
+
+def get_qa_pairs(df, qa_ids):
+    return df[df['qa_id'].isin(qa_ids)][['qa_id', 'Question', 'Answer']]
+
+def get_abstracts(df, abstract_ids):
+    return df[df['abstract_id'].isin(abstract_ids)][['abstract_id', 'abstract_text']]
+
+def query_top_k_answers_and_abstracts(df_1, df_2, query, k=10):
+    query_vector = get_sentence_vector(query)
+
+    qa_ids, question_scores = find_top_k_answers(df_1, query_vector, 'question_vector', k)
+    abstract_ids, abstract_scores = find_top_k_abstracts(df_2, query_vector, 'abstract_vector', k)
+
+    answers_df = get_qa_pairs(df_1, qa_ids)
+    abstracts_df = get_abstracts(df_2, abstract_ids)
+
+    answers_df['Similarity Score'] = question_scores
+    abstracts_df['Similarity Score'] = abstract_scores
+
+    return answers_df, abstracts_df
+
 def find_relevant_content(query):
     query_vector = get_biobert_embedding(query)
     
-    # Find similar questions in MedQuad
-    qa_scores = cosine_similarity([query_vector], np.vstack(medquad_embeddings['question_vector'].values))[0]
-    top_qa_indices = np.argsort(qa_scores)[-3:][::-1]
+    # Find similar questions in MedQuad (top 3)
+    qa_ids, question_scores = find_top_k_answers(
+        medquad_embeddings, 
+        query_vector, 
+        'question_vector', 
+        k=3
+    )
     
-    # Find similar abstracts in PubMed
-    abstract_scores = cosine_similarity([query_vector], np.vstack(pubmed_embeddings['abstract_vector'].values))[0]
-    top_abstract_indices = np.argsort(abstract_scores)[-3:][::-1]
+    # Find similar abstracts in PubMed (top 3)
+    abstract_ids, abstract_scores = find_top_k_abstracts(
+        pubmed_embeddings,
+        query_vector,
+        'abstract_vector',
+        k=3
+    )
     
-    relevant_qa = medquad_embeddings.iloc[top_qa_indices]
-    relevant_abstracts = pubmed_embeddings.iloc[top_abstract_indices]
+    # Get the actual QA pairs and abstracts
+    relevant_qa = get_qa_pairs(medquad_embeddings, qa_ids)
+    relevant_abstracts = get_abstracts(pubmed_embeddings, abstract_ids)
+    
+    # Add similarity scores
+    relevant_qa['Similarity Score'] = question_scores
+    relevant_abstracts['Similarity Score'] = abstract_scores
     
     return relevant_qa, relevant_abstracts
 
@@ -121,11 +177,29 @@ def generate_response(query, relevant_qa, relevant_abstracts):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     try:
+        # Get relevant content
         relevant_qa, relevant_abstracts = find_relevant_content(request.query)
+        
+        # Generate LLM response
         response = generate_response(request.query, relevant_qa, relevant_abstracts)
-        return {"response": response, "status": "success"}
+        
+        # Format QA pairs and abstracts for response
+        qa_pairs = relevant_qa[['Question', 'Answer']].to_dict('records')
+        abstracts = relevant_abstracts[['abstract_text']].to_dict('records')
+        
+        return ChatResponse(
+            response=response,
+            status="success",
+            qa_pairs=qa_pairs,
+            abstracts=abstracts
+        )
     except Exception as e:
-        return {"response": f"Error: {str(e)}", "status": "error"}
+        return ChatResponse(
+            response=f"Error: {str(e)}",
+            status="error",
+            qa_pairs=[],
+            abstracts=[]
+        )
 
 @app.get("/")
 async def root():

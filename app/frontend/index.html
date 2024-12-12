@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Medical Chatbot</title>
+    <title>Healthcare Chatbot</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="chat-container">
       <div class="chat-header">
-        <h1>Medical Chatbot</h1>
+        <h1>Healthcare Chatbot with Word Embedding Model</h1>
       </div>
       <div class="chat-messages" id="chatMessages">
         <!-- Messages will be inserted here -->
@@ -23,6 +23,21 @@
         <button onclick="sendMessage()" id="sendButton">Send</button>
       </div>
     </div>
+
+    <!-- Add this modal markup -->
+    <div id="contextModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Context Used</h2>
+        <div class="context-container">
+          <h3>Related Q&A Pairs</h3>
+          <div id="qaPairs"></div>
+          <h3>Related Research Abstracts</h3>
+          <div id="abstracts"></div>
+        </div>
+      </div>
+    </div>
+
     <script src="script.js"></script>
   </body>
 </html>
